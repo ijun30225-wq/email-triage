@@ -9,5 +9,6 @@
   "vip_senders": [
     "indeed.com",
     "capitalone.com"
-  ]
+  ],
+  "ntfy_topic": ""
 }

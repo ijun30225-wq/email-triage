@@ -63,10 +63,23 @@ Requires [Claude Code](https://claude.com/claude-code) installed and logged in
 
 ## Daily usage
 
-You mostly do nothing — it runs itself. When it has something for you:
+You mostly do nothing — it runs itself. When it has something for you, each flagged
+email gets its **own notification** (⚠️ important / ✉️ needs response) — **clicking or
+tapping it opens that exact thread in Gmail**, in the right account. Max 5 per run,
+with a "+N more" rollup beyond that.
 
-- **⚠️ Important email** notification → something from your watch-list or urgent.
-- **"N need a response · M drafts ready"** notification → people are waiting on you.
+### Notifications on your phone
+
+Uses [ntfy](https://ntfy.sh) — free, no account:
+
+1. Install the **ntfy** app (App Store / Play Store).
+2. In the app: **+ Subscribe to topic** → enter the value of `ntfy_topic` from your
+   `config.json` (pick a long random name — anyone who knows the topic can see the
+   pings, so treat it like a password).
+3. Done — important-email pushes arrive with tap-through to the Gmail thread.
+
+Mac notifications use `terminal-notifier` (`brew install terminal-notifier`) for
+click-through; without it they fall back to plain non-clickable notifications.
 
 ### Checking important emails
 

@@ -19,7 +19,7 @@ from pathlib import Path
 
 import gmail_client as gm
 from classifier import classify
-from notify import notify
+from notify import notify, push_phone
 
 PROJECT_DIR = Path(__file__).resolve().parent
 CONFIG_FILE = PROJECT_DIR / "config.json"
@@ -51,6 +51,11 @@ def cmd_accounts():
         print(f"  {a}")
 
 
+def _thread_url(account_email: str, msg_id: str) -> str:
+    """Deep link to one message, in the right Gmail account, on any device."""
+    return f"https://mail.google.com/mail/?authuser={account_email}#all/{msg_id}"
+
+
 def _vip_match(email_info: dict, vip_senders: list[str]) -> bool:
     sender = email_info["from"].lower()  # from-header only; subjects are too noisy
     return any(s.lower() in sender for s in vip_senders)
@@ -65,7 +70,8 @@ def triage_account(email_addr: str, config: dict) -> dict:
     emails = gm.fetch_untriaged(
         service, labels, config.get("lookback_days", 3), config.get("max_emails_per_account", 25)
     )
-    digest = {"account": display, "counts": {"needs_response": 0, "fyi": 0, "promo": 0},
+    digest = {"account": display, "email": email_addr,
+              "counts": {"needs_response": 0, "fyi": 0, "promo": 0},
               "needs_response": [], "important": [], "drafted": 0}
     if not emails:
         return digest
@@ -84,14 +90,12 @@ def triage_account(email_addr: str, config: dict) -> dict:
             add.append(labels["Triage/Important"])
         gm.apply_triage(service, e["id"], add, star=star)
         digest["counts"][cat] += 1
+        item = {"id": e["id"], "subject": e["subject"], "from": e["from"],
+                "summary": r.get("summary", "")}
         if important:
-            digest["important"].append(
-                {"subject": e["subject"], "from": e["from"], "summary": r.get("summary", "")}
-            )
+            digest["important"].append(item)
         if cat == "needs_response":
-            digest["needs_response"].append(
-                {"subject": e["subject"], "from": e["from"], "summary": r.get("summary", "")}
-            )
+            digest["needs_response"].append(item)
             if r.get("draft"):
                 gm.create_reply_draft(service, e, r["draft"])
                 digest["drafted"] += 1
@@ -128,23 +132,40 @@ def cmd_run():
             for item in d["needs_response"]:
                 f.write(f"  * {item['summary']} ({item['subject']})\n")
 
-    # --- notify ---
+    # --- notify: one clickable notification per flagged email (Mac + phone) ---
+    topic = config.get("ntfy_topic", "")
+    flagged = []  # (account_email, display, item, is_important) — deduped by message id
+    seen = set()
+    for d in digests:
+        for i in d.get("important", []):
+            if i["id"] not in seen:
+                seen.add(i["id"])
+                flagged.append((d["email"], d["account"], i, True))
+        for i in d.get("needs_response", []):
+            if i["id"] not in seen:
+                seen.add(i["id"])
+                flagged.append((d["email"], d["account"], i, False))
+
+    MAX_PINGS = 5
+    for account_email, display, item, imp in flagged[:MAX_PINGS]:
+        url = _thread_url(account_email, item["id"])
+        icon = "⚠️" if imp else "✉️"
+        title = f"{icon} [{display}] {item['subject'][:60]}"
+        notify(title, "Tap to open in Gmail", item["summary"], url=url)
+        push_phone(topic, title, item["summary"], url=url,
+                   priority="high" if imp else "default",
+                   tags="warning" if imp else "email")
+    if len(flagged) > MAX_PINGS:
+        more = len(flagged) - MAX_PINGS
+        notify("Email Triage", f"+{more} more flagged", "Run `triage.py important` to see all")
+        push_phone(topic, "Email Triage", f"+{more} more flagged emails", priority="default")
+
     total_needs = sum(len(d.get("needs_response", [])) for d in digests)
     total_drafts = sum(d.get("drafted", 0) for d in digests)
     errors = [d["account"] for d in digests if "error" in d]
-    important = [(d["account"], i) for d in digests for i in d.get("important", [])]
-    if important:
-        top = [f"[{acct}] {i['summary']}" for acct, i in important[:3]]
-        notify("⚠️ Important email", f"{len(important)} flagged", " / ".join(top))
-    if total_needs:
-        top = [f"[{d['account']}] {i['summary']}" for d in digests
-               for i in d.get("needs_response", [])][:3]
-        notify("Email Triage",
-               f"{total_needs} need a response · {total_drafts} drafts ready",
-               " / ".join(top))
-    elif errors:
+    if errors:
         notify("Email Triage", "Run finished with errors", ", ".join(errors))
-    else:
+    elif not flagged:
         notify("Email Triage", "Inbox clear", "Nothing needs a response.")
     print(f"Done. {total_needs} need response, {total_drafts} drafts created. Log: {LOG_FILE}")
 
@@ -155,7 +176,8 @@ def cmd_vipcheck():
     vip_senders = config.get("vip_senders", [])
     if not vip_senders:
         return
-    hits = []
+    topic = config.get("ntfy_topic", "")
+    hits = 0
     for email_addr in gm.list_accounts():
         display = config.get("account_names", {}).get(email_addr, email_addr)
         try:
@@ -164,12 +186,16 @@ def cmd_vipcheck():
             for m in gm.fetch_vip_hits(service, labels, vip_senders,
                                        config.get("lookback_days", 3)):
                 gm.apply_triage(service, m["id"], [labels["Triage/Important"]], star=True)
-                hits.append(f"[{display}] {m['subject']}")
+                hits += 1
+                if hits <= 5:
+                    url = _thread_url(email_addr, m["id"])
+                    title = f"⚠️ [{display}] {m['subject'][:60]}"
+                    notify(title, "Tap to open in Gmail", m["snippet"][:120], url=url)
+                    push_phone(topic, title, m["snippet"][:120], url=url,
+                               priority="high", tags="warning")
         except Exception as exc:
             print(f"[{email_addr}] vipcheck error: {exc}", file=sys.stderr)
-    if hits:
-        notify("⚠️ Important email", f"{len(hits)} from your watch-list", " / ".join(hits[:3]))
-    print(f"VIP check: {len(hits)} new hit(s).")
+    print(f"VIP check: {hits} new hit(s).")
 
 
 def cmd_important():
