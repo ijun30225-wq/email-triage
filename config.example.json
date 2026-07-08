@@ -1,0 +1,13 @@
+{
+  "model": "haiku",
+  "lookback_days": 3,
+  "max_emails_per_account": 25,
+  "account_names": {
+    "you@gmail.com": "Personal",
+    "you.school@gmail.com": "School"
+  },
+  "vip_senders": [
+    "indeed.com",
+    "capitalone.com"
+  ]
+}
