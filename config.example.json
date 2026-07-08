@@ -10,5 +10,8 @@
     "indeed.com",
     "capitalone.com"
   ],
-  "ntfy_topic": ""
+  "ntfy_topic": "",
+  "gmail_app_accounts": [
+    "you@gmail.com"
+  ]
 }

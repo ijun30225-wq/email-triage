@@ -52,8 +52,18 @@ def cmd_accounts():
 
 
 def _thread_url(account_email: str, msg_id: str) -> str:
-    """Deep link to one message, in the right Gmail account, on any device."""
+    """Web deep link to one message, in the right Gmail account."""
     return f"https://mail.google.com/mail/?authuser={account_email}#all/{msg_id}"
+
+
+def _phone_url(account_email: str, msg_id: str, config: dict) -> str:
+    """Phone click target: Gmail-app deep link if the account is in the app,
+    else the web URL. gmail_app_accounts lists accounts in the Gmail app's
+    switcher order (index = accountId in the googlegmail:// scheme)."""
+    order = config.get("gmail_app_accounts", [])
+    if account_email in order:
+        return f"googlegmail:///cv={msg_id}/accountId={order.index(account_email)}"
+    return _thread_url(account_email, msg_id)
 
 
 def _vip_match(email_info: dict, vip_senders: list[str]) -> bool:
@@ -148,11 +158,12 @@ def cmd_run():
 
     MAX_PINGS = 5
     for account_email, display, item, imp in flagged[:MAX_PINGS]:
-        url = _thread_url(account_email, item["id"])
         icon = "⚠️" if imp else "✉️"
         title = f"{icon} [{display}] {item['subject'][:60]}"
-        notify(title, "Tap to open in Gmail", item["summary"], url=url)
-        push_phone(topic, title, item["summary"], url=url,
+        notify(title, "Tap to open in Gmail", item["summary"],
+               url=_thread_url(account_email, item["id"]))
+        push_phone(topic, title, item["summary"],
+                   url=_phone_url(account_email, item["id"], config),
                    priority="high" if imp else "default",
                    tags="warning" if imp else "email")
     if len(flagged) > MAX_PINGS:
@@ -188,10 +199,11 @@ def cmd_vipcheck():
                 gm.apply_triage(service, m["id"], [labels["Triage/Important"]], star=True)
                 hits += 1
                 if hits <= 5:
-                    url = _thread_url(email_addr, m["id"])
                     title = f"⚠️ [{display}] {m['subject'][:60]}"
-                    notify(title, "Tap to open in Gmail", m["snippet"][:120], url=url)
-                    push_phone(topic, title, m["snippet"][:120], url=url,
+                    notify(title, "Tap to open in Gmail", m["snippet"][:120],
+                           url=_thread_url(email_addr, m["id"]))
+                    push_phone(topic, title, m["snippet"][:120],
+                               url=_phone_url(email_addr, m["id"], config),
                                priority="high", tags="warning")
         except Exception as exc:
             print(f"[{email_addr}] vipcheck error: {exc}", file=sys.stderr)
