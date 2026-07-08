@@ -57,12 +57,14 @@ def _thread_url(account_email: str, msg_id: str) -> str:
 
 
 def _phone_url(account_email: str, msg_id: str, config: dict) -> str:
-    """Phone click target: Gmail-app deep link if the account is in the app,
-    else the web URL. gmail_app_accounts lists accounts in the Gmail app's
-    switcher order (index = accountId in the googlegmail:// scheme)."""
-    order = config.get("gmail_app_accounts", [])
-    if account_email in order:
-        return f"googlegmail:///cv={msg_id}/accountId={order.index(account_email)}"
+    """Phone click target.
+
+    phone_open_gmail_app=true: launch the Gmail app (current Gmail iOS ignores
+    thread/account deep links — googlegmail:///cv=... just opens the app).
+    Otherwise: web URL, which does land on the exact thread in the browser.
+    """
+    if config.get("phone_open_gmail_app"):
+        return "googlegmail://"
     return _thread_url(account_email, msg_id)
 
 
