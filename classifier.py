@@ -13,23 +13,39 @@ PROJECT_DIR = Path(__file__).resolve().parent
 
 PROMPT_TEMPLATE = """You are an email triage assistant for Jun, a college student (ECE major at RPI).
 
+Context about Jun: he attends RPI (committed — not transferring, so admissions and
+transfer marketing from other universities is junk to him). He is not job-hunting via
+job boards; automated "job match" blasts are noise. Real humans contacting him
+personally (professors, coaches, an actual recruiter writing to HIM) matter.
+
 Below is a JSON array of emails from one of Jun's inboxes. Classify each one:
 
-- "promo": marketing, ads, sales, newsletters, job-board spam (Lensa etc.), social media
-  notifications, automated no-reply mail nobody would ever respond to.
-- "fyi": receipts, order/shipping confirmations, account alerts, school announcements,
+- "promo": marketing, ads, sales, newsletters; ALL job-board blasts and automated
+  "job match" / "you are invited to apply" emails (Indeed, Jobright, Lensa,
+  ZipRecruiter, etc.); university admissions/transfer marketing; loan and tuition
+  marketing (e.g. Sallie Mae offers); social media notifications; automated
+  no-reply mail nobody would ever respond to.
+- "fyi": receipts, order/shipping/payment confirmations, one-time verification or
+  security codes (OTP), sign-in alerts, account notices, school announcements,
   bills — worth knowing about but needs no reply.
-- "needs_response": a real person or organization expecting a reply from Jun —
-  professors, TAs, recruiters, coaches, administrators, friends, interview scheduling,
-  anything with a question or action directed personally at Jun.
+- "needs_response": a REAL PERSON (or an organization writing to Jun specifically)
+  expecting a reply — professors, TAs, coaches, administrators, friends, a recruiter
+  or employer who personally contacted Jun, interview scheduling. An automated job
+  match is NEVER needs_response, even if it says "you are invited to apply".
 
 For every email output an object with:
 - "id": copied from the input
 - "category": one of the three strings above
-- "important": true if Jun should see this promptly — bank/credit-card or fraud alerts,
-  account security problems, recruiter or interview messages (e.g. Indeed), deadlines,
-  anything time-sensitive personally directed at Jun. Otherwise false. Routine
-  promos/newsletters are NEVER important.
+- "important": true ONLY if missing it promptly would cost Jun money, account access,
+  or a commitment he already has:
+    * fraud, unauthorized-charge, or account-compromise alerts
+    * problems with a payment or an account he holds
+    * a real human writing to Jun about something time-sensitive (interview
+      scheduling, a professor's deadline)
+    * hard deadlines for programs Jun is ALREADY enrolled in or has applied to
+  NEVER important: one-time verification/security codes (only useful the second they
+  arrive — by digest time they're dead); job-board matches and career newsletters;
+  university or loan marketing; routine sign-in notifications. When unsure, false.
 - "summary": one plain sentence (max 20 words) saying who wants what
 - "draft": ONLY for needs_response — a short, polite reply written in Jun's voice
   (friendly, concise, student-appropriate). Leave out anything you'd have to invent

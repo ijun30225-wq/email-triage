@@ -13,8 +13,10 @@ Commands:
 import datetime
 import json
 import plistlib
+import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import gmail_client as gm
@@ -114,11 +116,33 @@ def triage_account(email_addr: str, config: dict) -> dict:
     return digest
 
 
+def _network_up() -> bool:
+    try:
+        socket.getaddrinfo("oauth2.googleapis.com", 443)
+        return True
+    except OSError:
+        return False
+
+
 def cmd_run():
     config = load_config()
     accounts = gm.list_accounts()
     if not accounts:
         raise SystemExit("No accounts authorized. Run: triage.py auth")
+
+    # Mac may have just woken from sleep — give the network a chance, then
+    # skip quietly rather than notifying an error for every account.
+    for _ in range(3):
+        if _network_up():
+            break
+        time.sleep(60)
+    else:
+        stamp = datetime.datetime.now().isoformat(timespec="seconds")
+        LOG_FILE.parent.mkdir(exist_ok=True)
+        with LOG_FILE.open("a") as f:
+            f.write(f"\n=== {stamp} === skipped: no network\n")
+        print("No network; skipping run.")
+        return
 
     digests = []
     for email_addr in accounts:
