@@ -63,10 +63,13 @@ Requires [Claude Code](https://claude.com/claude-code) installed and logged in
 
 ## Daily usage
 
-You mostly do nothing — it runs itself. When it has something for you, each flagged
-email gets its **own notification** (⚠️ important / ✉️ needs response) — **clicking or
-tapping it opens that exact thread in Gmail**, in the right account. Max 5 per run,
-with a "+N more" rollup beyond that.
+You mostly do nothing — it runs itself. When it has something for you:
+
+- **One flagged email** → a detailed notification (subject + AI summary).
+  Clicking it on the Mac opens the email in your browser (via the helper app,
+  see below); tapping on the phone opens the Gmail app.
+- **Several at once** → a single bundled notification listing the subjects,
+  so nothing gets buried under a stack.
 
 ### Notifications on your phone
 
@@ -76,10 +79,11 @@ Uses [ntfy](https://ntfy.sh) — free, no account:
 2. In the app: **+ Subscribe to topic** → enter the value of `ntfy_topic` from your
    `config.json` (pick a long random name — anyone who knows the topic can see the
    pings, so treat it like a password).
-3. Done — important-email pushes arrive with tap-through to the Gmail thread.
+3. iPhone Settings → Notifications → ntfy → allow Lock Screen / Banners / Sounds.
 
-Mac notifications use `terminal-notifier` (`brew install terminal-notifier`) for
-click-through; without it they fall back to plain non-clickable notifications.
+`phone_open_gmail_app` in config: `true` = taps launch the Gmail app (the app no
+longer supports thread deep links); `false` = taps open the exact email in the
+mobile browser.
 
 ### Checking important emails
 
@@ -116,6 +120,8 @@ send.
 | `max_emails_per_account` | Cap per run |
 | `account_names` | Nicknames shown in digests/notifications |
 | `vip_senders` | Watch-list — domain or address substrings matched against the From header (e.g. `capitalone.com`). Checked hourly. |
+| `muted_senders` | Never ping (still labeled/filed) — e.g. noisy work tools |
+| `phone_open_gmail_app` | Phone tap opens Gmail app (`true`) or the exact email in the browser (`false`) |
 
 ## Notes
 
