@@ -137,8 +137,10 @@ Mac notifications are posted through a tiny AppleScript app so that clicking one
 opens the email in your browser (`osascript` alone can't do click actions):
 
 ```sh
-osacompile -o "Email Triage.app" helper.applescript
+./build_helper.sh
 ```
 
+(The script also swaps out osacompile's default Script Editor bundle ID —
+without that, notification clicks open Script Editor instead of the helper.)
 Allow notifications for "Email Triage" when macOS asks. Quirk: the helper
 remembers one URL, so clicking a stale notification opens the most recent email.
