@@ -4,3 +4,7 @@ tokens/
 logs/
 venv/
 __pycache__/
+
+Email Triage.app/
+.notify_payload
+.last_url

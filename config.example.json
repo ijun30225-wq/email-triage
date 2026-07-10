@@ -7,9 +7,9 @@
     "you.school@gmail.com": "School"
   },
   "vip_senders": [
-    "indeedemail.com",
     "capitalone.com"
   ],
   "ntfy_topic": "",
-  "phone_open_gmail_app": true
+  "phone_open_gmail_app": true,
+  "muted_senders": []
 }

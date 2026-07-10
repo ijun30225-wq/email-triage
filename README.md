@@ -124,3 +124,15 @@ send.
 - One school/work account behind a locked-down Microsoft 365 tenant? Forwarding is
   usually blocked; browser-automation of Outlook web is the workaround (planned).
 - Secrets (`credentials.json`, OAuth tokens, personal `config.json`) are gitignored.
+
+## Mac click-through helper
+
+Mac notifications are posted through a tiny AppleScript app so that clicking one
+opens the email in your browser (`osascript` alone can't do click actions):
+
+```sh
+osacompile -o "Email Triage.app" helper.applescript
+```
+
+Allow notifications for "Email Triage" when macOS asks. Quirk: the helper
+remembers one URL, so clicking a stale notification opens the most recent email.

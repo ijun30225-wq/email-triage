@@ -75,6 +75,31 @@ def _vip_match(email_info: dict, vip_senders: list[str]) -> bool:
     return any(s.lower() in sender for s in vip_senders)
 
 
+def _send_pings(flagged: list, config: dict):
+    """flagged: (account_email, display, item, is_important) tuples.
+    One email -> a detailed notification that opens it.
+    Several -> a single bundled notification so nothing gets buried."""
+    if not flagged:
+        return
+    topic = config.get("ntfy_topic", "")
+    if len(flagged) == 1:
+        account_email, display, item, imp = flagged[0]
+        notify(item["subject"][:70], display, item["summary"],
+               url=_thread_url(account_email, item["id"]))
+        push_phone(topic, item["subject"][:70], f"{item['summary']} · {display}",
+                   url=_phone_url(account_email, item["id"], config),
+                   priority="high" if imp else "default")
+        return
+    title = f"{len(flagged)} emails need your attention"
+    lines = [f"{i['subject'][:48]} · {d}" for _, d, i, _ in flagged[:6]]
+    if len(flagged) > 6:
+        lines.append(f"…and {len(flagged) - 6} more")
+    home = "googlegmail://" if config.get("phone_open_gmail_app") else "https://mail.google.com/"
+    notify(title, "Email Triage", " / ".join(lines[:3]), url="https://mail.google.com/")
+    push_phone(topic, title, "\n".join(lines), url=home,
+               priority="high" if any(f[3] for f in flagged) else "default")
+
+
 def triage_account(email_addr: str, config: dict) -> dict:
     """Triage one account. Returns a per-account digest dict."""
     display = config.get("account_names", {}).get(email_addr, email_addr)
@@ -90,12 +115,19 @@ def triage_account(email_addr: str, config: dict) -> dict:
     if not emails:
         return digest
 
+    muted = config.get("muted_senders", [])
     results = classify(emails, config.get("model", "haiku"))
     for e in emails:
         r = results.get(e["id"])
         if r is None or r.get("category") not in CATEGORY_LABEL:
             continue  # not marked processed -> retried next run
         cat = r["category"]
+        if _vip_match(e, muted):
+            # muted: file it, never ping, never draft
+            gm.apply_triage(service, e["id"],
+                            [labels[CATEGORY_LABEL[cat]], labels["Triage/Processed"]])
+            digest["counts"][cat] += 1
+            continue
         # A watch-list sender's marketing blast is still marketing.
         important = (cat != "promo" and _vip_match(e, vip_senders)) or bool(r.get("important"))
         star = cat == "needs_response" or important
@@ -168,8 +200,7 @@ def cmd_run():
             for item in d["needs_response"]:
                 f.write(f"  * {item['summary']} ({item['subject']})\n")
 
-    # --- notify: one clickable notification per flagged email (Mac + phone) ---
-    topic = config.get("ntfy_topic", "")
+    # --- notify: one detailed ping for a single email, one bundle for several ---
     flagged = []  # (account_email, display, item, is_important) — deduped by message id
     seen = set()
     for d in digests:
@@ -181,21 +212,7 @@ def cmd_run():
             if i["id"] not in seen:
                 seen.add(i["id"])
                 flagged.append((d["email"], d["account"], i, False))
-
-    MAX_PINGS = 5
-    for account_email, display, item, imp in flagged[:MAX_PINGS]:
-        icon = "⚠️" if imp else "✉️"
-        title = f"{icon} [{display}] {item['subject'][:60]}"
-        notify(title, "Tap to open in Gmail", item["summary"],
-               url=_thread_url(account_email, item["id"]))
-        push_phone(topic, title, item["summary"],
-                   url=_phone_url(account_email, item["id"], config),
-                   priority="high" if imp else "default",
-                   tags="warning" if imp else "email")
-    if len(flagged) > MAX_PINGS:
-        more = len(flagged) - MAX_PINGS
-        notify("Email Triage", f"+{more} more flagged", "Run `triage.py important` to see all")
-        push_phone(topic, "Email Triage", f"+{more} more flagged emails", priority="default")
+    _send_pings(flagged, config)
 
     total_needs = sum(len(d.get("needs_response", [])) for d in digests)
     total_drafts = sum(d.get("drafted", 0) for d in digests)
@@ -213,8 +230,7 @@ def cmd_vipcheck():
     vip_senders = config.get("vip_senders", [])
     if not vip_senders:
         return
-    topic = config.get("ntfy_topic", "")
-    hits = 0
+    flagged = []
     for email_addr in gm.list_accounts():
         display = config.get("account_names", {}).get(email_addr, email_addr)
         try:
@@ -223,17 +239,13 @@ def cmd_vipcheck():
             for m in gm.fetch_vip_hits(service, labels, vip_senders,
                                        config.get("lookback_days", 3)):
                 gm.apply_triage(service, m["id"], [labels["Triage/Important"]], star=True)
-                hits += 1
-                if hits <= 5:
-                    title = f"⚠️ [{display}] {m['subject'][:60]}"
-                    notify(title, "Tap to open in Gmail", m["snippet"][:120],
-                           url=_thread_url(email_addr, m["id"]))
-                    push_phone(topic, title, m["snippet"][:120],
-                               url=_phone_url(email_addr, m["id"], config),
-                               priority="high", tags="warning")
+                item = {"id": m["id"], "subject": m["subject"],
+                        "summary": m["snippet"][:100]}
+                flagged.append((email_addr, display, item, True))
         except Exception as exc:
             print(f"[{email_addr}] vipcheck error: {exc}", file=sys.stderr)
-    print(f"VIP check: {hits} new hit(s).")
+    _send_pings(flagged, config)
+    print(f"VIP check: {len(flagged)} new hit(s).")
 
 
 def cmd_important():

@@ -4,16 +4,34 @@ and phone push via ntfy.sh (tap opens the email thread)."""
 import json
 import subprocess
 import sys
+import time
 import urllib.request
+from pathlib import Path
+
+PROJECT_DIR = Path(__file__).resolve().parent
+HELPER_APP = PROJECT_DIR / "Email Triage.app"
+PAYLOAD_FILE = PROJECT_DIR / ".notify_payload"
+
+
+def _oneline(s: str) -> str:
+    return " ".join((s or "").split())
 
 
 def notify(title: str, subtitle: str, body: str, url: str | None = None):
-    """macOS notification via osascript.
+    """macOS notification.
 
-    Note: osascript notifications can't carry a click action, so `url` is unused
-    here — phone pushes (push_phone) carry the tap-to-open link instead.
-    terminal-notifier supported click-through but renders nothing on recent macOS.
+    With a URL: posted through the helper app ("Email Triage.app"), so clicking
+    the notification relaunches the helper, which opens the email in the browser.
+    (Clicking an older notification opens the most recent URL — helper keeps one.)
+    Without a URL (or no helper app): plain osascript notification.
     """
+    if url and HELPER_APP.exists():
+        PAYLOAD_FILE.write_text(
+            "\n".join([_oneline(title), _oneline(subtitle), _oneline(body), url])
+        )
+        subprocess.run(["open", "-a", str(HELPER_APP)], capture_output=True)
+        time.sleep(2)  # let the helper consume the payload before the next one
+        return
     script = (
         f"display notification {json.dumps(body)} "
         f"with title {json.dumps(title)} subtitle {json.dumps(subtitle)} sound name \"Glass\""
@@ -22,7 +40,7 @@ def notify(title: str, subtitle: str, body: str, url: str | None = None):
 
 
 def push_phone(topic: str, title: str, body: str, url: str | None = None,
-               priority: str = "default", tags: str = "email"):
+               priority: str = "default", tags: str = ""):
     """Push to the ntfy app on the phone. Tapping the notification opens `url`.
 
     Uses ntfy's JSON publish API — plain HTTP headers reject non-ASCII (emoji
